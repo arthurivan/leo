@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/kyc/verify",
+    "bodyPatterns": [ { "matchesJsonPath": "$.userId" } ]
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": { "kyc": "ok" },
+    "headers": { "Content-Type": "application/json" }
+  }
+}
