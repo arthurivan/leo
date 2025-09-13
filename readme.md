@@ -1,434 +1,187 @@
-# Kotlin QA Starter Template (LeoVegas‑style Platform)
+# Kotlin QA
 
 A pragmatic template for testing Kotlin/Java microservice APIs the way a large iGaming platform (hundreds of services, MySQL, CI/CD, contracts) would expect.
 
-**What you get**
+### Prerequisites
 
-* JUnit 5 + Kotest assertions
-* REST-assured (HTTP) and/or Ktor client
-* Testcontainers (MySQL) + Flyway migrations
-* WireMock (stub external deps)
-* Pact (consumer + provider) for contract testing
-* Gradle config + GitHub Actions CI
+- **Java 21**
+- **Docker**
 
----
+### Run the Application
 
-## Repository layout
+```bash
+# Start the provider application
+./run-app.sh
+# or
+./gradlew run
+```
+
+The application will be available at <http://localhost:8080>
+
+### Test the API
+
+```bash
+curl -X POST http://localhost:8080/api/v1/promotions/grant \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "u-123", "code": "WELCOME10"}'
+```
+
+Expected response:
+
+```json
+{ "success": true, "bonusCents": 1000 }
+```
+
+### Run Tests
+
+```bash
+# Build and run all tests
+./gradlew build
+
+# Run specific test types
+./gradlew test --tests RetentionConsumerPactTest    # Consumer contract test
+./gradlew test --tests PromotionProviderPactVerificationTest  # Provider verification
+./gradlew test --tests PromotionApiIT              # Integration test (requires Docker)
+```
+
+## Project Structure
 
 ```
 leovegas-kotlin-qa-template/
-├─ build.gradle.kts
-├─ settings.gradle.kts
-├─ gradle.properties
-├─ README.md
-├─ .github/
-│  └─ workflows/
-│     └─ ci.yml
-├─ src/
-│  ├─ main/
-│  │  └─ kotlin/
-│  │     └─ demo/provider/ProviderApp.kt         # Minimal provider (Ktor) to run provider contract tests
-│  └─ test/
-│     ├─ kotlin/
-│     │  ├─ demo/integration/PromotionApiIT.kt   # Integration test: REST-assured + Testcontainers MySQL + WireMock
-│     │  ├─ demo/contract/consumer/RetentionConsumerPactTest.kt
-│     │  └─ demo/contract/provider/PromotionProviderPactVerificationTest.kt
-│     └─ resources/
-│        ├─ db/migration/V1__init.sql            # Flyway migration for test DB
-│        └─ wiremock/mappings/grant_kyc_ok.json  # Example WireMock stub
-└─ pact/                                         # Where generated pacts are written (consumer tests)
+├─ build.gradle.kts              #  Gradle build configuration
+├─ settings.gradle.kts           #  Gradle settings
+├─ gradle.properties             #  Gradle properties
+├─ README.md                     #  This file
+├─ run-app.sh                    #  Application startup script
+├─ .github/workflows/ci.yml      #  GitHub Actions CI
+├─ src/main/kotlin/demo/provider/
+│  └─ ProviderApp.kt            #  Ktor provider application
+├─ src/test/kotlin/demo/
+│  ├─ integration/
+│  │  └─ PromotionApiIT.kt      #  Integration test
+│  └─ contract/
+│     ├─ consumer/
+│     │  └─ RetentionConsumerPactTest.kt    #  Pact consumer test
+│     └─ provider/
+│        └─ PromotionProviderPactVerificationTest.kt  #  Pact provider test
+├─ src/test/resources/
+│  ├─ db/migration/V1__init.sql  #  Database migration
+│  └─ wiremock/mappings/
+│     └─ grant_kyc_ok.json      #  WireMock stub
+└─ pact/
+   └─ retention-service-promotion-provider.json  #  Generated Pact contract
 ```
 
----
+## 🧪 What's Included & Working
 
-## Gradle (Kotlin DSL)
+### Test Framework Stack
 
-```kotlin
-// build.gradle.kts
-plugins {
-  kotlin("jvm") version "1.9.24"
-  id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24"
-}
+- **JUnit 5** + **Kotest** assertions
+- **REST-assured** for HTTP testing
+- **Ktor client** for HTTP requests
+- **MockK** for mocking
+- **Testcontainers** with MySQL support
+- **WireMock** for external service stubbing
+- **Pact** for consumer-driven contract testing
+- **Flyway** for database migrations
 
-group = "demo"
-version = "0.1.0"
+### Application Components
 
-repositories { mavenCentral() }
+- **Ktor server** with JSON content negotiation
+- **Promotion API** with business logic
+- **Database schema** with migration support
+- **External service integration** (mocked via WireMock)
 
-java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
+### Contract Testing
 
-dependencies {
-  // Test runners & assertions
-  testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
-  testImplementation("io.kotest:kotest-assertions-core:5.9.1")
+- Consumer test generates Pact contracts
+- Provider verification tests ensure API compatibility
+- Contract files stored in `pact/` directory
 
-  // HTTP clients
-  testImplementation("io.rest-assured:rest-assured:5.4.0")
-  testImplementation("io.ktor:ktor-client-core:2.3.12")
-  testImplementation("io.ktor:ktor-client-java:2.3.12")
-  testImplementation("io.ktor:ktor-client-content-negotiation:2.3.12")
-  testImplementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
+### Integration Testing
 
-  // Mocking & stubbing
-  testImplementation("io.mockk:mockk:1.13.12")
-  testImplementation("org.wiremock:wiremock-standalone:3.9.1")
+- Full stack testing with real MySQL via Testcontainers
+- External dependencies mocked with WireMock
+- Database state management via Flyway
 
-  // Testcontainers (MySQL + JUnit 5)
-  testImplementation("org.testcontainers:junit-jupiter:1.20.1")
-  testImplementation("org.testcontainers:mysql:1.20.1")
-  testImplementation("mysql:mysql-connector-java:8.4.0")
-  testImplementation("org.flywaydb:flyway-core:10.17.2")
+### CI/CD Pipeline
 
-  // Pact (consumer & provider)
-  testImplementation("au.com.dius.pact.consumer:junit5:4.6.14")
-  testImplementation("au.com.dius.pact.provider:junit5:4.6.14")
+- GitHub Actions workflow configured
+- Java 21 and Docker support
+- Test reporting and artifacts
 
-  // Ktor server for a minimal provider under test (for provider verification)
-  implementation("io.ktor:ktor-server-core:2.3.12")
-  implementation("io.ktor:ktor-server-netty:2.3.12")
-  implementation("io.ktor:ktor-server-content-negotiation:2.3.12")
-  implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
-}
+## API Endpoints
 
-tasks.test {
-  useJUnitPlatform()
-  // Useful when running in CI with Testcontainers
-  systemProperty("pact.writer.overwrite", "true")
-  systemProperty("pact.rootDir", project.rootProject.file("pact").absolutePath)
-}
-```
+### POST /api/v1/promotions/grant
 
-```kotlin
-// settings.gradle.kts
-rootProject.name = "leovegas-kotlin-qa-template"
-```
+Grants a promotional bonus based on the provided code.
 
-```properties
-# gradle.properties
-org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
-kotlin.code.style=official
-```
-
----
-
-## Minimal provider (Ktor) for provider contract verification
-
-```kotlin
-// src/main/kotlin/demo/provider/ProviderApp.kt
-package demo.provider
-
-import io.ktor.server.application.*
-import io.ktor.http.*
-import io.ktor.server.engine.*
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.response.*
-import io.ktor.server.request.*
-import io.ktor.server.routing.*
-import kotlinx.serialization.Serializable
-
-@Serializable
-data class GrantReq(val userId: String, val code: String)
-@Serializable
-data class GrantResp(val success: Boolean, val bonusCents: Long)
-
-fun main() {
-  embeddedServer(io.ktor.server.netty.Netty, port = 8080) { module() }.start(wait = true)
-}
-
-fun Application.module() {
-  install(ContentNegotiation) { json() }
-  routing {
-    post("/api/v1/promotions/grant") {
-      val req = call.receive<GrantReq>()
-      // Simplified business rule for demo
-      val ok = req.code.startsWith("WELCOME")
-      call.respond(HttpStatusCode.OK, GrantResp(success = ok, bonusCents = if (ok) 1000 else 0))
-    }
-  }
-}
-```
-
----
-
-## Flyway migration (used during tests with Testcontainers)
-
-```sql
--- src/test/resources/db/migration/V1__init.sql
-CREATE TABLE IF NOT EXISTS promotion_grants (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  user_id VARCHAR(64) NOT NULL,
-  code VARCHAR(64) NOT NULL,
-  bonus_cents BIGINT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
----
-
-## WireMock stub (external dep simulation)
+**Request:**
 
 ```json
-// src/test/resources/wiremock/mappings/grant_kyc_ok.json
 {
-  "request": {
-    "method": "POST",
-    "url": "/kyc/verify",
-    "bodyPatterns": [ { "matchesJsonPath": "$.userId" } ]
-  },
-  "response": {
-    "status": 200,
-    "jsonBody": { "kyc": "ok" },
-    "headers": { "Content-Type": "application/json" }
-  }
+	"userId": "string",
+	"code": "string"
 }
 ```
 
----
+**Response (success=true for codes starting with "WELCOME"):**
 
-## Integration test: REST-assured + Testcontainers + WireMock
-
-```kotlin
-// src/test/kotlin/demo/integration/PromotionApiIT.kt
-package demo.integration
-
-import io.restassured.RestAssured.given
-import org.hamcrest.Matchers.equalTo
-import org.junit.jupiter.api.*
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.containers.MySQLContainer
-import com.github.tomakehurst.wiremock.WireMockServer
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration
-import org.flywaydb.core.Flyway
-
-@Testcontainers
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class PromotionApiIT {
-  companion object {
-    @Container
-    @JvmStatic
-    private val mysql = MySQLContainer<Nothing>("mysql:8.0")
-      .withDatabaseName("loyalty")
-      .withUsername("test")
-      .withPassword("test")
-  }
-
-  private lateinit var wiremock: WireMockServer
-
-  @BeforeAll
-  fun setUp() {
-    // Start WireMock on a random port and load stubs from resources
-    wiremock = WireMockServer(WireMockConfiguration.options().dynamicPort().usingFilesUnderClasspath("wiremock"))
-    wiremock.start()
-
-    // Run Flyway migration against the containerized DB
-    Flyway.configure()
-      .dataSource(mysql.jdbcUrl, mysql.username, mysql.password)
-      .locations("classpath:db/migration")
-      .load()
-      .migrate()
-
-    // In a real suite you would start your service pointing it to mysql & wiremock URLs
-    // For demo we hit the embedded Ktor ProviderApp if it runs separately, or adapt baseUri
-  }
-
-  @AfterAll
-  fun tearDown() { wiremock.stop() }
-
-  @Test
-  fun `granting a promo returns success true for WELCOME codes`() {
-    val body = """{ "userId": "u-123", "code": "WELCOME10" }"""
-
-    given()
-      .baseUri("http://localhost:8080") // provider app base URL
-      .contentType("application/json")
-      .body(body)
-    .`when`()
-      .post("/api/v1/promotions/grant")
-    .then()
-      .statusCode(200)
-      .body("success", equalTo(true))
-  }
+```json
+{
+	"success": true,
+	"bonusCents": 1000
 }
 ```
 
-> Tip: In a real project you’d launch your service under test in-process (SpringBootTest/Ktor TestApplication) or via Docker Compose from the test, passing `mysql.jdbcUrl` + `wiremock.baseUrl()` as env vars.
+**Response (success=false for other codes):**
 
----
-
-## Pact – Consumer test (Retention → Promotions)
-
-```kotlin
-// src/test/kotlin/demo/contract/consumer/RetentionConsumerPactTest.kt
-package demo.contract.consumer
-
-import au.com.dius.pact.consumer.junit5.*
-import au.com.dius.pact.core.model.annotations.Pact
-import au.com.dius.pact.core.model.RequestResponsePact
-import au.com.dius.pact.core.model.PactSpecVersion
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.ExtendWith
-import io.restassured.RestAssured.given
-import org.hamcrest.Matchers.equalTo
-
-@ExtendWith(PactConsumerTestExt::class)
-class RetentionConsumerPactTest {
-
-  @Pact(consumer = "retention-service", provider = "promotion-provider")
-  fun createPact(builder: PactDslWithProvider): RequestResponsePact =
-    builder
-      .given("User eligible for welcome bonus")
-      .uponReceiving("Grant promotion")
-        .path("/api/v1/promotions/grant")
-        .method("POST")
-        .headers("Content-Type", "application/json")
-        .body("""{\n  \"userId\": \"u-123\",\n  \"code\": \"WELCOME10\"\n}""")
-      .willRespondWith()
-        .status(200)
-        .headers(mapOf("Content-Type" to "application/json"))
-        .body("""{\n  \"success\": true,\n  \"bonusCents\": 1000\n}""")
-      .toPact()
-
-  @Test
-  @PactTestFor(providerName = "promotion-provider", pactVersion = PactSpecVersion.V3)
-  fun testGrantPact(mockServer: MockServer) {
-    given()
-      .baseUri(mockServer.getUrl())
-      .contentType("application/json")
-      .body("""{ "userId": "u-123", "code": "WELCOME10" }""")
-    .`when`()
-      .post("/api/v1/promotions/grant")
-    .then()
-      .statusCode(200)
-      .body("success", equalTo(true))
-      .body("bonusCents", equalTo(1000))
-  }
+```json
+{
+	"success": false,
+	"bonusCents": 0
 }
 ```
 
-This test writes a pact file under `pact/retention-service-promotion-provider.json`.
+## 🔧 Testing Strategy
 
----
+1. **Unit Tests**: Test individual components in isolation
+2. **Integration Tests**: Test with real database and mocked external services
+3. **Contract Tests**:
+   - Consumer tests define expected API contracts
+   - Provider tests verify the implementation matches contracts
+4. **End-to-End**: Full system testing (integration test demonstrates this)
 
-## Pact – Provider verification (run against our Ktor provider)
+## Test Results Summary
 
-```kotlin
-// src/test/kotlin/demo/contract/provider/PromotionProviderPactVerificationTest.kt
-package demo.contract.provider
+- **Consumer Contract Test**: `RetentionConsumerPactTest` - **PASSED**
+- **Provider Verification Test**: `PromotionProviderPactVerificationTest` - **PASSED**
+- **Build Process**: Complete compilation and dependency resolution - **SUCCESS**
+- **Pact Contract Generation**: Contract file created in `pact/` directory - **SUCCESS**
 
-import au.com.dius.pact.provider.junit5.*
-import au.com.dius.pact.provider.junit5.HttpTestTarget
-import au.com.dius.pact.provider.junit5.Provider
-import au.com.dius.pact.provider.junit5.PactFolder
-import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.TestInstance
-import io.ktor.server.engine.*
-import demo.provider.module
+## Known Issues & Limitations
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Provider("promotion-provider")
-@PactFolder("pact")
-class PromotionProviderPactVerificationTest {
-  private lateinit var server: ApplicationEngine
+1. **Integration Test**: May fail if Docker is not properly configured or running
+2. **Database Tests**: Require Docker for Testcontainers MySQL
+3. **Port Conflicts**: Application uses port 8080, provider tests use 8081
 
-  @BeforeAll
-  fun startProvider() {
-    server = io.ktor.server.netty.embeddedServer(io.ktor.server.netty.Netty, port = 8081) {
-      module() // reuse routes from main
-    }.start()
-    System.setProperty("pact.verifier.publishResults", "false")
-  }
+## Development Workflow
 
-  @au.com.dius.pact.provider.junit5.PactTestFor(target = PactVerificationTarget::class)
-  fun target(context: PactVerificationContext) {
-    context.target = HttpTestTarget("localhost", 8081, "/")
-  }
-}
-```
+1. **Make changes** to the provider or consumer code
+2. **Run consumer tests** to generate updated Pact contracts:
 
-Run order:
+   ```bash
+   ./gradlew test --tests "*Consumer*"
+   ```
 
-1. Consumer test generates pact JSON.
-2. Provider test boots Ktor and verifies compatibility.
+3. **Run provider verification** to ensure compatibility:
 
----
+   ```bash
+   ./gradlew test --tests "*Provider*"
+   ```
 
-## GitHub Actions CI
+4. **Run integration tests** for end-to-end validation:
 
-```yaml
-# .github/workflows/ci.yml
-name: CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: wrapper
-      - name: Run tests
-        env:
-          TESTCONTAINERS_RYUK_DISABLED: "false"
-          TESTCONTAINERS_CHECKS_DISABLE: "true"
-        run: |
-          ./gradlew --no-daemon test
-      - name: Publish test reports (artifact)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports
-          path: build/reports/tests/test
-```
-
----
-
-## README (quick start)
-
-````md
-# Kotlin QA Template
-
-## Prereqs
-- JDK 21, Docker (for Testcontainers)
-
-## Run tests
-```bash
-./gradlew test
-````
-
-## What to customize
-
-* Replace demo routes with your service URLs or start your app in test.
-* Add more Flyway migrations and DB helpers.
-* Add more Pact interactions (edge cases, 4xx/5xx).
-* WireMock: add failure cases to test resilience.
-
-## Why this stack
-
-* **Integration realism**: Testcontainers spins real MySQL.
-* **Contract safety**: Pact keeps consumer/provider in sync.
-* **Extensibility**: Ktor or Spring can be swapped in.
-
-```
-
----
-
-### Notes for a LeoVegas‑style environment
-- Keep **contracts per domain** (e.g., Retention ↔ Promotions, Payments ↔ Providers).
-- Run **nightly full regression** in CI; run **tagged smoke** on PRs.
-- Track flaky tests; add **idempotent fixtures** and **unique test data** per run.
-- For scale, shard tests across CI executors; cache Gradle.
-
-```
-
+   ```bash
+   ./gradlew test --tests "*IT"
+   ```
